@@ -9,9 +9,12 @@
 global mainAppName
 global mainAppPath
 global parentFolderPath
-global progressBarScript
 global errorCode
 global appList
+
+global reportError
+global sendReportScript
+global progressBarScript
 
 
 
@@ -25,9 +28,15 @@ global appList
 --~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~--
 --~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~--
 
-on sendReport(errorNumber, description)
+on sendReport(a, b, c, d)
 	
-	-- TODO send error report
+	-- runs sendReport from sendReport script with given info
+	if reportError is yes then
+		display dialog "Error loading send report script. Unable to send report" with title mainAppName buttons {"Okay"} default button "Okay"
+		quit
+	else
+		tell sendReportScript to sendReport()
+	end if
 end sendReport
 ------------------------------
 
@@ -37,10 +46,7 @@ on mainAppError(errorNumber, description)
 	set response to (display dialog errorCode & errorNumber & return & return & mainAppName & " encountered an error and needs to close. Would you like to send an error report?" & return & return & "details: " & return & description with title mainAppName buttons {"No", "Yes"} default button "Yes")
 	
 	-- if user input is yes then sends report
-	if button returned of response is "Yes" then sendReport(errorNumber, description)
-
-    -- quits this app
-    quit
+	if button returned of response is "Yes" then sendReport(mainAppName, errorCode, errorNumber, description)
 end mainAppError
 ------------------------------
 
@@ -51,6 +57,7 @@ on appError(errorNumber, appName, description)
 		set response to (display dialog errorCode & errorNumber & appName & return & return & appName & " encountered an error" & return & return & description buttons {"Continue"} default button "Continue")
 	on error
 		mainAppError("M001-" & errorNumber, "couldn't display error after failing to open " & appName)
+		quit
 	end try
 end appError
 ------------------------------
@@ -71,7 +78,7 @@ end openApp
 ------------------------------
 
 on openApps(appNames)
-
+	
 	-- opens multiple apps in one command
 	repeat with appName in appNames
 		openApp(appName)
@@ -95,7 +102,7 @@ end quitApp
 ------------------------------
 
 on quitApps(appNames)
-
+	
 	-- quits multiple apps in one command
 	repeat with appName in appNames
 		if application appName is running then quitApp(appName)
@@ -138,25 +145,28 @@ on loadScript(scriptName) -- loads script by given name
 	
 	-- gets path to script by searching for given name
 	set searchResults to findFile(parentFolderPath as alias, scriptName)
-    set searchResultsParagraphs to paragraphs of searchResults
-    set searchResultsLength to length of searchResultsParagraphs
-
-    -- 
-    if searchResultsLength is 0 then
+	set searchResultsParagraphs to paragraphs of searchResults
+	set searchResultsLength to length of searchResultsParagraphs
+	
+	-- 
+	if searchResultsLength is 0 then
 		mainAppError("M002-" & scriptName, "Couldn't find script file " & scriptName & " in " & parentFolderPath)
-    else if searchResultsLength is 1 then
-        set searchResult to searchResults
-    else if searchResultsLength is greater than 1 then
-        set searchResult to (choose from list searchResultsParagraphs with prompt "Multiple files found matching " & scriptName & return & return & "please select the desired file" with title mainAppName)
-        if searchResult is false then mainAppError("M003-" & scriptName, "User didn't select one of following options: " & searchResultsParagraphs)
-    end if
-
+		quit
+	else if searchResultsLength is 1 then
+		set searchResult to searchResults
+	else if searchResultsLength is greater than 1 then
+		set searchResult to (choose from list searchResultsParagraphs with prompt "Multiple files found matching " & scriptName & return & return & "please select the desired file" with title mainAppName)
+		if searchResult is false then mainAppError("M003-" & scriptName, "User didn't select one of following options: " & searchResultsParagraphs)
+		quit
+	end if
+	
 	-- loads script file
 	try
-		set tmpScript to (load script file (searchResult as alias))
+		set tmpScript to load script searchResult
 	on error e
 		--displayNotification("", mainAppName, "Error loading script file " & scriptName, "Basso")
 		mainAppError("M004-" & scriptName, e)
+		quit
 	end try
 	
 	return tmpScript
@@ -165,6 +175,14 @@ end loadScript
 
 on loadScripts() -- loads various scripts using loadScript handle
 	
+	-- loads send report script
+	set reportError to no
+	try
+		set sendReportScript to loadScript("sendReport")
+	on error
+		set reportError to yes
+	end try
+
 	-- loads progress bar script
 	set progressBarScript to loadScript("progressBar")
 end loadScripts
@@ -182,7 +200,7 @@ on getInfo()
 	set mainAppPath to path to me
 	
 	-- gets the parent folder of this application
-	tell application "Finder" to set parentFolderPath to parent of mainAppPath
+	tell application "Finder" to set parentFolderPath to container of mainAppPath
 end getInfo
 
 
@@ -201,7 +219,7 @@ getInfo()
 loadScripts()
 ------------------------------
 
-set appList to {"Terminal", "DriveDx", "Disk Utility"}
+set appList to {"Terminal", "Activity Monitor", "Disk Utility"}
 
 --startProgressBar(0, 0, "Test progress bar", "Loading...")
 
