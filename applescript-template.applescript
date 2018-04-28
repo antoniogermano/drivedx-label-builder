@@ -119,20 +119,6 @@ on displayNotification(nMessage, nTitle, nSubtitle, nSound)
 end displayNotification
 ------------------------------
 
-on startProgressBar(a, b, c, d)
-	
-	-- starts a new progress bar or resets current one
-	tell progressBarScript to startProgressBar(a, b, c, d)
-end startProgressBar
-------------------------------
-
-on advanceProgressBar(a, b, c, d)
-	
-	-- advances current open progress bar
-	tell progressBarScript to advanceProgressBar(a, b, c, d)
-end advanceProgressBar
-------------------------------
-
 on findFile(tmpPath, scriptName)
 	
 	-- searchs for given fileName in tmpPath and returns results
@@ -164,7 +150,6 @@ on loadScript(scriptName) -- loads script by given name
 	try
 		set tmpScript to load script searchResult
 	on error e
-		--displayNotification("", mainAppName, "Error loading script file " & scriptName, "Basso")
 		mainAppError("M004-" & scriptName, e)
 		quit
 	end try
@@ -202,7 +187,21 @@ on getInfo()
 	-- gets the parent folder of this application
 	tell application "Finder" to set parentFolderPath to container of mainAppPath
 end getInfo
+------------------------------
 
+on startProgressBar(a, b, c, d)
+	
+	-- starts a new progress bar or resets current one
+	tell progressBarScript to startProgressBar(a, b, c, d)
+end startProgressBar
+------------------------------
+
+on advanceProgressBar(a, b, c, d)
+	
+	-- advances current open progress bar
+	tell progressBarScript to advanceProgressBar(a, b, c, d)
+end advanceProgressBar
+------------------------------
 
 
 
