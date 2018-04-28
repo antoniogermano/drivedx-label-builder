@@ -11,6 +11,8 @@ global mainAppPath
 global parentFolderPath
 global progressBarScript
 global errorCode
+global appList
+
 
 
 
@@ -23,54 +25,82 @@ global errorCode
 --~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~--
 --~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~--
 
-on sendReport(errorNumber)
+on sendReport(errorNumber, description)
 	
 	-- TODO send error report
 end sendReport
 ------------------------------
 
-on mainAppError(errorNumber)
+on mainAppError(errorNumber, description)
 	
 	-- displays dialog with error code and error number. prompts user to send report or not
-	set response to (display dialog errorCode & errorNumber & return & return & mainAppName & " encountered an error and needs to close. Would you like to send an error report" with title mainAppName buttons {"No", "Yes"} default button "Yes")
+	set response to (display dialog errorCode & errorNumber & return & return & mainAppName & " encountered an error and needs to close. Would you like to send an error report?" & return & return & "details: " & return & description with title mainAppName buttons {"No", "Yes"} default button "Yes")
 	
 	-- if user input is yes then sends report
-	if button returned of response is "Yes" then sendReport(errorNumber)
+	if button returned of response is "Yes" then sendReport(errorNumber, description)
 
     -- quits this app
     quit
 end mainAppError
 ------------------------------
 
-on appError(errorNumber, appName)
+on appError(errorNumber, appName, description)
 	
 	-- displays dialog with error code, error number, and app name
 	try
-		set response to (display dialog errorCode & errorNumber & return & return & appName & " encountered an error and could not open. would you like to try and reopen?" buttons {"Retry", "Continue"} default button "Continue")
+		set response to (display dialog errorCode & errorNumber & appName & return & return & appName & " encountered an error" & return & return & description buttons {"Continue"} default button "Continue")
 	on error
-		mainAppError("001-" & errorNumber)
+		mainAppError("M001-" & errorNumber, "couldn't display error after failing to open " & appName)
 	end try
-	
-	-- tries to open app again
-	if response is "Retry" then
-		try
-			openApp(appName)
-		on error
-			display dialog "Unable to open " & appName & ". Ensure that it is installed and uncorrupted" with title mainAppName buttons {"Okay"} default button "Okay"
-		end try
-	end if
 end appError
 ------------------------------
 
-on openApp(errorNumber, appName)
+on openApp(appName)
 	
 	-- opens app by given name
 	try
 		activate application appName
-	on error
-		appError(errorNumber, appName)
+		if appName is "Terminal" then
+			tell application "Terminal" to close windows
+			delay 0.5
+		end if
+	on error e
+		appError("A001-", appName, e)
 	end try
 end openApp
+------------------------------
+
+on openApps(appNames)
+
+	-- opens multiple apps in one command
+	repeat with appName in appNames
+		openApp(appName)
+	end repeat
+end openApps
+------------------------------
+
+on quitApp(appName)
+	
+	-- quits app by given name
+	try
+		do shell script "killall '" & appName & "'"
+	on error killallError
+		try
+			do shell script "pkill '" & appName & "'"
+		on error pkillError
+			appError("A002-", appName, killallError & return & pkillError)
+		end try
+	end try
+end quitApp
+------------------------------
+
+on quitApps(appNames)
+
+	-- quits multiple apps in one command
+	repeat with appName in appNames
+		if application appName is running then quitApp(appName)
+	end repeat
+end quitApps
 ------------------------------
 
 on displayNotification(nMessage, nTitle, nSubtitle, nSound)
@@ -113,13 +143,12 @@ on loadScript(scriptName) -- loads script by given name
 
     -- 
     if searchResultsLength is 0 then
-        displayNotification("", mainAppName, scriptName & " was not found", "Basso")
-		mainAppError("002-" & scriptName)
+		mainAppError("M002-" & scriptName, "Couldn't find script file " & scriptName & " in " & parentFolderPath)
     else if searchResultsLength is 1 then
         set searchResult to searchResults
     else if searchResultsLength is greater than 1 then
         set searchResult to (choose from list searchResultsParagraphs with prompt "Multiple files found matching " & scriptName & return & return & "please select the desired file" with title mainAppName)
-        if searchResult is false then quit
+        if searchResult is false then mainAppError("M003-" & scriptName, "User didn't select one of following options: " & searchResultsParagraphs)
     end if
 
 	-- loads script file
@@ -127,7 +156,7 @@ on loadScript(scriptName) -- loads script by given name
 		set tmpScript to (load script file (searchResult as alias))
 	on error e
 		--displayNotification("", mainAppName, "Error loading script file " & scriptName, "Basso")
-		mainAppError("003-" & scriptName & return & return & e)
+		mainAppError("M004-" & scriptName, e)
 	end try
 	
 	return tmpScript
@@ -137,8 +166,7 @@ end loadScript
 on loadScripts() -- loads various scripts using loadScript handle
 	
 	-- loads progress bar script
-	loadScript("progressBar")
-	set progressBarScript to result
+	set progressBarScript to loadScript("progressBar")
 end loadScripts
 ------------------------------
 
@@ -171,8 +199,12 @@ end getInfo
 
 getInfo()
 loadScripts()
+------------------------------
+
+set appList to {"Terminal", "DriveDx", "Disk Utility"}
 
 --startProgressBar(0, 0, "Test progress bar", "Loading...")
+
 
 
 
