@@ -1,12 +1,23 @@
 ----------------------------------------
+----------------------- GLOBAL VARIABLES
+----------------------------------------
+
+global ignoreDrives
+----------------------------------------
+------------------- END GLOBAL VARIABLES
+----------------------------------------
+
+
+
+----------------------------------------
 -------------------------------- HANDLES
 ----------------------------------------
 
 on saveReport()
-
+	
 	-- opens DriveDx
-    activate application "DriveDx"
-
+	activate application "DriveDx"
+	
 	-- sets name of file to be saved
 	set fileName to "DriveDx_Report_TMP.txt"
 	
@@ -24,9 +35,9 @@ on saveReport()
 						
 						-- clicks save report menu button
 						click menu item "Refresh Drive(s) Health Status"
-
+						
 						delay 2.5
-
+						
 						-- clicks save report menu button
 						click menu item "Save Drive(s) Health Report..."
 						
@@ -39,7 +50,7 @@ on saveReport()
 						
 						-- saves file
 						keystroke return
-
+						
 						delay 1
 					end tell
 				end tell
@@ -63,10 +74,10 @@ on readFile(fileName)
 			
 			-- reads contents of the file
 			set theFileContents to read theFile
-
+			
 			-- delays to let DriveDx finish writting file
 			delay 2.5
-
+			
 			-- reads contents of the file again to get all data
 			set theFileContents to read theFile
 			
@@ -87,69 +98,84 @@ end readFile
 ----------------------------------------
 
 on separateData(theFileContents)
-
+	
 	-- initially sets final report to blank
 	set finalReport to {}
-
+	
 	-- specifies list of subcategories to grab data from
 	set desiredSubcategoriesList to {" ###", "DEVICE CAPABILITIES ===", "PROBLEMS SUMMARY ===", "IMPORTANT HEALTH INDICATORS ==="}
 	
 	-- specifies list of data to get from report for each subcategory
-	set desiredInfoList to {"Volumes ", "Advanced SMART Status ", "Total Capacity ", "Model Family  ", "Model  ", "Drive Type ", "Reallocated Sector Count ", "Current Pending Sector Count ", "Offline Uncorrectable Sector Count ", "UDMA CRC Error Count "}
+	set desiredInfoList to {"Volumes ", "Advanced SMART Status ", "Serial Number ", "Total Capacity ", "Model Family  ", "Model  ", "Drive Type ", "Reallocated Sector Count ", "Current Pending Sector Count ", "Offline Uncorrectable Sector Count ", "UDMA CRC Error Count "}
 	
 	-- separates info for each drive
 	set oldDelims to AppleScript's text item delimiters
 	set AppleScript's text item delimiters to "
 ### "
 	set allDrives to text items of theFileContents
-
+	
 	-- repeats through info for each drive in report
 	repeat with currentDrive in allDrives
-
+		
 		-- initially sets final item to blank
 		set finalItem to "BLANKBLANKBLANK"
-
+		
 		-- separates subcategories
 		set AppleScript's text item delimiters to "
 === "
 		set currentSubcategoryList to text items of currentDrive
-
+		
 		-- repeats through each subcategory for current drive
 		repeat with currentSubcategory in currentSubcategoryList
-		
+			
 			-- repeat throguh each desired subcategory
 			repeat with desiredSubcategory in desiredSubcategoriesList
-
+				
 				-- ignores system info and continues if current subcategory is in desired subcategory list
 				if currentSubcategory contains "SYSTEM INFORMATION" then
 				else if currentSubcategory is "" then
 				else if currentSubcategory contains desiredSubcategory then
-
+					
 					-- repeats over each line in current subcategory
 					repeat with currentLine in paragraphs of currentSubcategory
-
+						
 						-- repeats with each item in desired info list
 						repeat with desiredInfo in desiredInfoList
-
+							
 							-- continue if desired info is on current line
 							if currentLine contains desiredInfo then
-
+								
 								-- sets tmpItem to second item of current line
 								if currentSubcategory contains "IMPORTANT HEALTH INDICATORS ===" then
 									set AppleScript's text item delimiters to "     "
-									set tmpItem to text item 2 through -2 of currentLine
+									set tmpItemLong to (text items 2 through -2 of currentLine) as text
+									set x to 1
+									set seenNumberYet to no
+									repeat
+										set currentChar to (get character -x of tmpItemLong)
+										if "1234567890," contains currentChar then
+											if seenNumberYet is no then set endItem to -x
+											set seenNumberYet to yes
+										else
+											if seenNumberYet is yes then
+												set tmpItem to text -(x - 1) through endItem of tmpItemLong
+												exit repeat
+											end if
+										end if
+										set x to x + 1
+									end repeat
 								else
 									set AppleScript's text item delimiters to ": "
 									set tmpItem to text item 2 of currentLine
 								end if
-
+								
 								-- adds tmpItem to final report
 								if currentLine contains "Volumes " then
-									set finalItem to desiredInfo & "===  " & tmpItem as text & return & return & finalItem
+									set finalItem to (desiredInfo & "===  " & tmpItem as text) & return & return & finalItem
 								else if finalItem is "BLANKBLANKBLANK" then
-									set finalItem to desiredInfo & "===  " & tmpItem as text & return
+									set finalItem to (desiredInfo & "===  " & tmpItem as text) & return
 								else
-									set finalItem to finalItem & desiredInfo & "===  " & tmpItem as text & return
+									set finalItem to (finalItem & desiredInfo & "===  " & tmpItem as text) & return
 								end if
 							end if
 						end repeat
@@ -157,7 +183,14 @@ on separateData(theFileContents)
 				end if
 			end repeat
 		end repeat
-		copy finalItem to end of finalReport
+		
+		-- goes through each serial number in ignoreDrives and marks current item to not copy if there is a match
+		set copyItem to yes
+		repeat with ignoreDrive in ignoreDrives
+			if finalItem contains ignoreDrive then set copyItem to no
+		end repeat
+		if copyItem is yes then copy finalItem to end of finalReport
+		
 	end repeat
 	set AppleScript's text item delimiters to oldDelims
 	return finalReport
@@ -165,24 +198,31 @@ end separateData
 ----------------------------------------
 
 on displayResults(finalReport)
-
+	
 	-- activates this app
 	activate application name of me
-
+	
 	-- goes through each item in final report
 	repeat with finalItem in finalReport
 		log finalItem
 		if finalItem contains "BLANKBLANKBLANK" then
 		else
-			set response to display dialog finalItem with title name of me buttons {"Quit","Next drive"} default button "Next drive"
+			set response to display dialog finalItem with title name of me buttons {"Quit", "Ignore drive temporarily", "Next drive"} default button "Next drive"
 			if button returned of response is "Quit" then
 				quit
+			else if button returned of response is "Ignore drive temporarily" then
+				repeat with currentLine in paragraphs of finalItem
+					if currentLine contains "Serial number " then
+						set AppleScript's text item delimiters to "===  "
+						copy text item 2 of currentLine to end of ignoreDrives
+					end if
+				end repeat
 			end if
 		end if
 	end repeat
-
+	
 	-- prompts user to run again or quit
-	set response to display dialog "End of drives." & return & return & "Run again?" with title name of me buttons {"Quit","Yes"} default button "Yes"
+	set response to display dialog "End of drives." & return & return & "Run again?" with title name of me buttons {"Quit", "Yes"} default button "Yes"
 	if button returned of response is "Quit" then
 		quit
 	end if
@@ -197,6 +237,7 @@ end displayResults
 ---------------------------- MAIN SCRIPT
 ----------------------------------------
 
+set ignoreDrives to {}
 repeat
 	saveReport()
 	readFile(result)
